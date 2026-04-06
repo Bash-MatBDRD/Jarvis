@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J.A.R.V.I.S</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- Fond animé -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- Barre de statut système -->
+<header id="status-bar">
+  <div class="status-left">
+    <span class="status-label">J.A.R.V.I.S</span>
+    <span class="sep">//</span>
+    <span id="s-time">--:--</span>
+  </div>
+  <div class="status-center">
+    <div class="stat-item"><span class="stat-lbl">CPU</span><span id="s-cpu" class="stat-val">--%</span></div>
+    <div class="stat-item"><span class="stat-lbl">RAM</span><span id="s-ram" class="stat-val">--</span></div>
+    <div class="stat-item"><span class="stat-lbl">DISQUE</span><span id="s-disk" class="stat-val">--%</span></div>
+    <div class="stat-item"><span class="stat-lbl">BATTERIE</span><span id="s-bat" class="stat-val">--%</span></div>
+  </div>
+  <div class="status-right">
+    <span id="mode-badge" class="badge">MODE BASIQUE</span>
+    <span id="conn-badge" class="badge badge-green">EN LIGNE</span>
+  </div>
+</header>
+
+<!-- Interface principale -->
+<main id="main">
+
+  <!-- Orbe central -->
+  <section id="orb-section">
+    <div id="orb-wrapper">
+      <!-- Anneaux tournants -->
+      <svg id="rings" viewBox="0 0 400 400">
+        <circle class="ring r1" cx="200" cy="200" r="170" />
+        <circle class="ring r2" cx="200" cy="200" r="145" />
+        <circle class="ring r3" cx="200" cy="200" r="118" />
+        <!-- Marqueurs sur l'anneau ext -->
+        <g id="tick-marks"></g>
+        <!-- Arc actif -->
+        <circle class="arc-active" cx="200" cy="200" r="170" />
+      </svg>
+
+      <!-- Noyau central -->
+      <div id="orb-core">
+        <div id="orb-logo">J.A.R.V.I.S</div>
+        <div id="orb-sub">SYSTÈMES EN LIGNE</div>
+        <!-- Visualiseur vocal -->
+        <div id="wave-wrap">
+          <canvas id="wave-canvas" width="160" height="40"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- État en dessous de l'orbe -->
+    <div id="state-label">EN ATTENTE</div>
+
+    <!-- Bouton micro -->
+    <button id="mic-btn" title="Appuyer pour parler (ou claper des mains)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+    </button>
+
+    {% if not has_api_key %}
+    <div id="no-key-banner">
+      ⚠ Pas de clé OpenAI dans <code>config.py</code> — mode commandes basiques actif.
+      <a href="https://platform.openai.com/api-keys" target="_blank">Obtenir une clé →</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- Journal de conversation -->
+  <section id="conv-section">
+    <div id="conv-header">
+      <span>JOURNAL DE SESSION</span>
+      <button id="clear-btn" title="Effacer l'historique">⌫ Effacer</button>
+    </div>
+    <div id="conv-log"></div>
+
+    <!-- Saisie texte -->
+    <div id="input-row">
+      <input id="text-input" type="text"
+             placeholder="Tapez une commande ou posez une question…"
+             autocomplete="off" spellcheck="false">
+      <button id="send-btn">↵</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/static/js/jarvis.js"></script>
+</body>
+</html>
