@@ -188,11 +188,9 @@ function speak(text) {
 }
 
 // ── Reconnaissance vocale (Web Speech API) ────────────────────────────────
-let silenceTimer  = null;
-let safetyTimer   = null;
+let safetyTimer = null;
 
 function stopListening() {
-  clearTimeout(silenceTimer);
   clearTimeout(safetyTimer);
   if (recognizer) { try { recognizer.stop(); } catch(_) {} }
 }
@@ -205,34 +203,27 @@ function setupRecognizer() {
   }
   const r = new SR();
   r.lang            = 'fr-FR';
-  r.continuous      = false;
+  r.continuous      = false;  // s'arrête seul après une pause naturelle
   r.interimResults  = false;
   r.maxAlternatives = 1;
 
   r.onresult = e => {
-    clearTimeout(silenceTimer);
     clearTimeout(safetyTimer);
     const text = e.results[0][0].transcript;
     sendMessage(text);
   };
 
-  // Commence à compter le silence UNIQUEMENT quand la parole s'arrête
-  r.onspeechstart = () => clearTimeout(silenceTimer);
-  r.onspeechend   = () => {
-    silenceTimer = setTimeout(() => stopListening(), 1200);
-  };
-
   r.onerror = e => {
-    clearTimeout(silenceTimer);
     clearTimeout(safetyTimer);
     setState('idle');
     if (e.error !== 'no-speech') showToast(`Erreur micro : ${e.error}`);
   };
+
   r.onend = () => {
-    clearTimeout(silenceTimer);
     clearTimeout(safetyTimer);
     if (state === 'listening') setState('idle');
   };
+
   return r;
 }
 
@@ -242,8 +233,8 @@ function startListening() {
   if (!recognizer) return;
   setState('listening');
   recognizer.start();
-  // Sécurité : arrête après 15s max si rien n'est dit
-  safetyTimer = setTimeout(() => stopListening(), 15000);
+  // Sécurité uniquement : coupe si aucune parole détectée après 10s
+  safetyTimer = setTimeout(() => stopListening(), 10000);
 }
 
 micBtn.addEventListener('click', startListening);

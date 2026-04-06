@@ -170,11 +170,25 @@ class JarvisAI:
         self._mode    = 'basic'
         self._provider = 'none'
 
-        provider = config.get('ai_provider', 'groq').lower()
+        provider = config.get('ai_provider', 'openai').lower()
 
         try:
             from openai import OpenAI
 
+            # ── Essai OpenAI ──────────────────────────────────────────────────
+            if provider == 'openai':
+                key = config.get('openai_api_key', '').strip()
+                if key:
+                    self._client   = OpenAI(api_key=key)
+                    self._model    = config.get('openai_model', 'gpt-4o-mini')
+                    self._mode     = 'ai'
+                    self._provider = 'openai'
+                    print(f"  [ Mode IA activé — OpenAI ({self._model}) ]")
+                else:
+                    print("  [ OpenAI : pas de clé — tentative avec Groq ]")
+                    provider = 'groq'   # fallback automatique
+
+            # ── Essai Groq (ou fallback) ──────────────────────────────────────
             if provider == 'groq':
                 key = config.get('groq_api_key', '').strip()
                 if key:
@@ -187,18 +201,7 @@ class JarvisAI:
                     self._provider = 'groq'
                     print(f"  [ Mode IA activé — Groq ({self._model}) ]")
                 else:
-                    print("  [ Groq sélectionné mais pas de clé — mode basique ]")
-
-            elif provider == 'openai':
-                key = config.get('openai_api_key', '').strip()
-                if key:
-                    self._client   = OpenAI(api_key=key)
-                    self._model    = config.get('openai_model', 'gpt-4o-mini')
-                    self._mode     = 'ai'
-                    self._provider = 'openai'
-                    print(f"  [ Mode IA activé — OpenAI ({self._model}) ]")
-                else:
-                    print("  [ OpenAI sélectionné mais pas de clé — mode basique ]")
+                    print("  [ Groq : pas de clé non plus — mode basique ]")
 
         except ImportError:
             print("  [ openai non installé — mode basique ]")
