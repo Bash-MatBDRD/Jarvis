@@ -84,22 +84,27 @@ class SystemController:
         webbrowser.open(url)
         return f"Recherche Google lancée pour : {query}"
 
-    # ── Informations système ──────────────────────────────────────────────────
+    # ── Informations système (résumé topbar) ─────────────────────────────────
 
     def get_system_info(self) -> dict:
-        cpu    = psutil.cpu_percent(interval=0.5)
-        ram    = psutil.virtual_memory()
-        disk   = psutil.disk_usage('/')
+        cpu     = psutil.cpu_percent(interval=0.3)
+        ram     = psutil.virtual_memory()
         battery = psutil.sensors_battery()
-        now    = datetime.now()
+        now     = datetime.now()
+
+        try:
+            disk = psutil.disk_usage('C:\\' if platform.system() == 'Windows' else '/')
+            disk_str = f"{disk.used / 1e9:.0f} Go / {disk.total / 1e9:.0f} Go ({disk.percent:.0f}%)"
+        except Exception:
+            disk_str = "N/A"
 
         info = {
-            'cpu':    f"{cpu:.0f}%",
-            'ram':    f"{ram.used / 1e9:.1f} Go / {ram.total / 1e9:.1f} Go ({ram.percent:.0f}%)",
-            'disk':   f"{disk.used / 1e9:.0f} Go / {disk.total / 1e9:.0f} Go ({disk.percent:.0f}%)",
-            'time':   now.strftime('%H:%M'),
-            'date':   now.strftime('%A %d %B %Y'),
-            'os':     f"{platform.system()} {platform.release()}",
+            'cpu':  f"{cpu:.0f}%",
+            'ram':  f"{ram.used / 1e9:.1f} Go / {ram.total / 1e9:.1f} Go ({ram.percent:.0f}%)",
+            'disk': disk_str,
+            'time': now.strftime('%H:%M'),
+            'date': now.strftime('%A %d %B %Y'),
+            'os':   f"{platform.system()} {platform.release()}",
         }
         if battery:
             status = "en charge" if battery.power_plugged else "sur batterie"
@@ -107,12 +112,130 @@ class SystemController:
         else:
             info['battery'] = "Secteur"
 
-        # Texte lisible pour JARVIS
         info['summary'] = (
             f"CPU à {info['cpu']}, RAM {info['ram']}, "
             f"disque {info['disk']}, batterie {info['battery']}."
         )
         return info
+
+    # ── Informations système détaillées (dashboard) ───────────────────────────
+
+    def get_detailed_info(self) -> dict:
+        # CPU
+        per_core  = psutil.cpu_percent(interval=0.3, percpu=True)
+        cpu_freq  = psutil.cpu_freq()
+        cpu_total = sum(per_core) / max(len(per_core), 1)
+
+        # RAM
+        ram  = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+
+        # Disques
+        disks = []
+        for part in psutil.disk_partitions(all=False):
+            try:
+                u = psutil.disk_usage(part.mountpoint)
+                disks.append({
+                    'device':     part.device,
+                    'mountpoint': part.mountpoint,
+                    'fstype':     part.fstype,
+                    'total_gb':   round(u.total / 1e9, 1),
+                    'used_gb':    round(u.used  / 1e9, 1),
+                    'free_gb':    round(u.free  / 1e9, 1),
+                    'percent':    u.percent,
+                })
+            except Exception:
+                pass
+
+        # Disk I/O
+        try:
+            io = psutil.disk_io_counters()
+            disk_io = {
+                'read_mb':  round(io.read_bytes  / 1e6, 1),
+                'write_mb': round(io.write_bytes / 1e6, 1),
+            }
+        except Exception:
+            disk_io = {'read_mb': 0, 'write_mb': 0}
+
+        # Réseau
+        net = psutil.net_io_counters()
+        interfaces = {}
+        for name, addrs in psutil.net_if_addrs().items():
+            for a in addrs:
+                if a.family == 2:  # AF_INET IPv4
+                    interfaces[name] = a.address
+        net_stats = psutil.net_if_stats()
+        net_up = {n: s.isup for n, s in net_stats.items()}
+
+        # Processus top 12 par CPU
+        procs = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+            try:
+                procs.append({
+                    'pid':    p.info['pid'],
+                    'name':   p.info['name'],
+                    'cpu':    round(p.info['cpu_percent'] or 0, 1),
+                    'mem':    round(p.info['memory_percent'] or 0, 1),
+                    'status': p.info['status'],
+                })
+            except Exception:
+                pass
+        procs.sort(key=lambda x: x['cpu'], reverse=True)
+        procs = procs[:12]
+
+        # Batterie
+        battery = psutil.sensors_battery()
+        bat_info = None
+        if battery:
+            bat_info = {
+                'percent':  round(battery.percent),
+                'plugged':  battery.power_plugged,
+                'secs_left': battery.secsleft if battery.secsleft and battery.secsleft > 0 else None,
+            }
+
+        # Températures (si disponibles)
+        temps = {}
+        try:
+            raw = psutil.sensors_temperatures()
+            for chip, entries in raw.items():
+                for e in entries:
+                    if e.current and e.current > 0:
+                        temps[f"{chip}/{e.label or 'core'}"] = round(e.current, 1)
+        except Exception:
+            pass
+
+        return {
+            'cpu': {
+                'total':    round(cpu_total, 1),
+                'per_core': [round(v, 1) for v in per_core],
+                'freq_mhz': round(cpu_freq.current) if cpu_freq else 0,
+                'freq_max': round(cpu_freq.max)     if cpu_freq else 0,
+                'cores_log': psutil.cpu_count(logical=True),
+                'cores_phy': psutil.cpu_count(logical=False),
+                'model':     platform.processor() or platform.machine(),
+            },
+            'ram': {
+                'total_gb': round(ram.total    / 1e9, 1),
+                'used_gb':  round(ram.used     / 1e9, 1),
+                'free_gb':  round(ram.available / 1e9, 1),
+                'percent':  ram.percent,
+                'swap_total_gb': round(swap.total / 1e9, 1),
+                'swap_used_gb':  round(swap.used  / 1e9, 1),
+                'swap_percent':  swap.percent,
+            },
+            'disks':    disks,
+            'disk_io':  disk_io,
+            'network': {
+                'sent_mb':    round(net.bytes_sent / 1e6, 1),
+                'recv_mb':    round(net.bytes_recv / 1e6, 1),
+                'interfaces': interfaces,
+                'up':         net_up,
+            },
+            'processes': procs,
+            'battery':   bat_info,
+            'temps':     temps,
+            'os':        f"{platform.system()} {platform.release()} — {platform.node()}",
+        }
 
     # ── Météo ─────────────────────────────────────────────────────────────────
 

@@ -3,123 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>J.A.R.V.I.S</title>
+<title>J.A.R.V.I.S — Interface</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-
 <canvas id="bg-canvas"></canvas>
 
 <div id="hud">
 
-  <!-- ── TOP BAR ── -->
+  <!-- ══════════════ TOP BAR ══════════════ -->
   <header id="topbar">
     <div class="tb-left">
-      <div class="jarvis-title">J·A·R·V·I·S</div>
-      <div class="tb-sep"></div>
-      <div class="tb-sub">MARK VII · SYSTÈME ACTIF</div>
+      <span class="brand">J·A·R·V·I·S</span>
+      <span class="tb-div"></span>
+      <span class="brand-sub">MARK VII</span>
     </div>
-    <div class="tb-center">
-      <div class="stat-block"><span class="sl">CPU</span><span class="sv" id="s-cpu">--%</span></div>
-      <div class="stat-block"><span class="sl">MEM</span><span class="sv" id="s-ram">--</span></div>
-      <div class="stat-block"><span class="sl">DSK</span><span class="sv" id="s-disk">--%</span></div>
-      <div class="stat-block"><span class="sl">BAT</span><span class="sv" id="s-bat">--%</span></div>
+    <div class="tb-stats">
+      <div class="tsb"><span class="tsl">CPU</span><span class="tsv" id="s-cpu">--%</span></div>
+      <div class="tsb"><span class="tsl">RAM</span><span class="tsv" id="s-ram">--</span></div>
+      <div class="tsb"><span class="tsl">DSK</span><span class="tsv" id="s-disk">--%</span></div>
+      <div class="tsb"><span class="tsl">BAT</span><span class="tsv" id="s-bat">--%</span></div>
+      <div class="tsb"><span class="tsl">NET↑</span><span class="tsv" id="s-net-up">--</span></div>
+      <div class="tsb"><span class="tsl">NET↓</span><span class="tsv" id="s-net-down">--</span></div>
     </div>
     <div class="tb-right">
-      <div id="mode-badge" class="badge">MODE BASIQUE</div>
-      <div class="badge badge-ok">EN LIGNE</div>
-      <div id="s-time" class="tb-time">--:--</div>
+      <span id="mode-badge" class="badge">BASIQUE</span>
+      <span class="badge badge-ok" id="conn-badge">EN LIGNE</span>
+      <span id="s-time" class="tb-time">--:--</span>
     </div>
   </header>
 
-  <!-- ── MAIN ── -->
+  <!-- ══════════════ MAIN 3 COLONNES ══════════════ -->
   <main id="main">
 
-    <!-- LEFT: Reactor + Controls -->
-    <section id="left-panel">
+    <!-- ── COL GAUCHE : Réacteur + Contrôles ── -->
+    <section id="col-left">
+      <div class="panel h-full">
+        <div class="panel-corners"></div>
 
-      <!-- Corner brackets -->
-      <div class="corner tl"></div>
-      <div class="corner tr"></div>
-      <div class="corner bl"></div>
-      <div class="corner br"></div>
-
-      <!-- Arc reactor -->
-      <div id="reactor-wrap">
-        <svg id="reactor-svg" viewBox="0 0 320 320">
-          <!-- Outer ring -->
-          <circle class="rr r-outer" cx="160" cy="160" r="148"/>
-          <!-- Tick marks outer -->
-          <g id="ticks"></g>
-          <!-- Spinning rings -->
-          <circle class="rr r1" cx="160" cy="160" r="128"/>
-          <circle class="rr r2" cx="160" cy="160" r="108"/>
-          <circle class="rr r3" cx="160" cy="160" r="88"/>
-          <!-- Hexagon spokes -->
-          <g id="spokes" opacity=".35">
-            <line x1="160" y1="160" x2="160" y2="30" />
-            <line x1="160" y1="160" x2="274" y2="97" />
-            <line x1="160" y1="160" x2="274" y2="223"/>
-            <line x1="160" y1="160" x2="160" y2="290"/>
-            <line x1="160" y1="160" x2="46"  y2="223"/>
-            <line x1="160" y1="160" x2="46"  y2="97" />
-          </g>
-          <!-- Arc actif -->
-          <circle class="arc-active" cx="160" cy="160" r="148"/>
-          <!-- Glow center -->
-          <circle id="core-glow" cx="160" cy="160" r="44" opacity=".15"/>
-          <circle id="core-inner" cx="160" cy="160" r="28"/>
-        </svg>
-
-        <!-- Texte au centre du réacteur -->
-        <div id="reactor-text">
-          <div id="reactor-label">J.A.R.V.I.S</div>
-          <div id="state-label">EN ATTENTE</div>
-          <canvas id="wave-canvas" width="110" height="28"></canvas>
+        <!-- Réacteur -->
+        <div id="reactor-wrap">
+          <svg id="reactor-svg" viewBox="0 0 280 280">
+            <circle class="rr r-outer" cx="140" cy="140" r="130"/>
+            <g id="ticks"></g>
+            <circle class="rr r1" cx="140" cy="140" r="112"/>
+            <circle class="rr r2" cx="140" cy="140" r="94"/>
+            <circle class="rr r3" cx="140" cy="140" r="76"/>
+            <g id="spokes" opacity=".3">
+              <line x1="140" y1="140" x2="140" y2="22"/>
+              <line x1="140" y1="140" x2="243" y2="82"/>
+              <line x1="140" y1="140" x2="243" y2="198"/>
+              <line x1="140" y1="140" x2="140" y2="258"/>
+              <line x1="140" y1="140" x2="37"  y2="198"/>
+              <line x1="140" y1="140" x2="37"  y2="82"/>
+            </g>
+            <circle class="arc-a" cx="140" cy="140" r="130"/>
+            <circle class="arc-b" cx="140" cy="140" r="112"/>
+            <circle id="core-glow"  cx="140" cy="140" r="40" opacity=".12"/>
+            <circle id="core-inner" cx="140" cy="140" r="24"/>
+          </svg>
+          <div id="reactor-text">
+            <div id="reactor-lbl">J.A.R.V.I.S</div>
+            <div id="state-lbl">EN ATTENTE</div>
+            <canvas id="wave-cv" width="96" height="24"></canvas>
+          </div>
         </div>
+
+        <!-- Bouton micro -->
+        <button id="mic-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8"  y1="23" x2="16" y2="23"/>
+          </svg>
+          <span id="mic-lbl">PARLER</span>
+        </button>
+
+        <!-- Sélection devices audio -->
+        <div id="audio-devices">
+          <div class="dev-row">
+            <span class="dev-ico">🎤</span>
+            <div class="dev-col">
+              <span class="dev-lbl">MICROPHONE</span>
+              <select id="mic-select" class="dev-sel"><option value="">Détection…</option></select>
+            </div>
+          </div>
+          <div class="dev-row">
+            <span class="dev-ico">🔊</span>
+            <div class="dev-col">
+              <span class="dev-lbl">SORTIE AUDIO</span>
+              <select id="out-select" class="dev-sel"><option value="">Par défaut</option></select>
+            </div>
+          </div>
+        </div>
+
+        {% if not has_api_key %}
+        <div id="warn-banner">⚠ Clé OpenAI manquante — <a href="https://platform.openai.com/api-keys" target="_blank">Obtenir →</a></div>
+        {% endif %}
       </div>
-
-      <!-- Mic button -->
-      <button id="mic-btn" title="Cliquer ou claper des mains">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8"  y1="23" x2="16" y2="23"/>
-        </svg>
-        <span id="mic-label">PARLER</span>
-      </button>
-
-      {% if not has_api_key %}
-      <div id="warn-banner">
-        ⚠ Clé OpenAI manquante dans <code>config.py</code> — mode basique actif.
-        <a href="https://platform.openai.com/api-keys" target="_blank">Obtenir →</a>
-      </div>
-      {% endif %}
-
     </section>
 
-    <!-- RIGHT: Conversation -->
-    <section id="right-panel">
-      <div class="corner tl"></div>
-      <div class="corner tr"></div>
-      <div class="corner bl"></div>
-      <div class="corner br"></div>
+    <!-- ── COL CENTRE : Dashboard système ── -->
+    <section id="col-center">
+      <div class="panel h-full flex-col">
+        <div class="panel-corners"></div>
 
-      <div id="conv-header">
-        <span class="conv-title">JOURNAL DE SESSION</span>
-        <button id="clear-btn">⌫ EFFACER</button>
+        <!-- Onglets -->
+        <div id="tab-nav">
+          <button class="tab active" data-tab="cpu">⚙ CPU</button>
+          <button class="tab" data-tab="ram">💾 RAM</button>
+          <button class="tab" data-tab="storage">🗄 STOCKAGE</button>
+          <button class="tab" data-tab="network">🌐 RÉSEAU</button>
+          <button class="tab" data-tab="procs">📋 PROCESSUS</button>
+        </div>
+
+        <!-- Contenu des onglets -->
+        <div id="tab-body">
+
+          <!-- ─ CPU ─ -->
+          <div id="tab-cpu" class="tab-pane active">
+            <div class="info-grid">
+              <div class="info-row"><span class="ik">MODÈLE</span><span class="iv" id="cpu-model">—</span></div>
+              <div class="info-row"><span class="ik">CŒURS PHYSIQUES</span><span class="iv" id="cpu-phy">—</span></div>
+              <div class="info-row"><span class="ik">CŒURS LOGIQUES</span><span class="iv" id="cpu-log">—</span></div>
+              <div class="info-row"><span class="ik">FRÉQUENCE</span><span class="iv" id="cpu-freq">—</span></div>
+            </div>
+            <div class="sec-title">CHARGE GLOBALE</div>
+            <div class="big-bar-wrap">
+              <div class="big-bar"><div id="cpu-bar-total" class="big-bar-fill"></div></div>
+              <span id="cpu-pct-total" class="big-bar-val">0%</span>
+            </div>
+            <div class="sec-title">PAR CŒUR</div>
+            <div id="core-bars" class="core-grid"></div>
+            <div class="sec-title">TEMPÉRATURES</div>
+            <div id="temp-list" class="temp-grid"><span class="dim">Non disponible sur ce système</span></div>
+          </div>
+
+          <!-- ─ RAM ─ -->
+          <div id="tab-ram" class="tab-pane">
+            <div class="info-grid">
+              <div class="info-row"><span class="ik">TOTAL</span><span class="iv" id="ram-total">—</span></div>
+              <div class="info-row"><span class="ik">UTILISÉE</span><span class="iv" id="ram-used">—</span></div>
+              <div class="info-row"><span class="ik">LIBRE</span><span class="iv" id="ram-free">—</span></div>
+            </div>
+            <div class="sec-title">MÉMOIRE VIVE</div>
+            <div class="big-bar-wrap">
+              <div class="big-bar"><div id="ram-bar" class="big-bar-fill fill-blue"></div></div>
+              <span id="ram-pct" class="big-bar-val">0%</span>
+            </div>
+            <div class="ram-segments" id="ram-segments"></div>
+            <div class="sec-title">SWAP / MÉMOIRE VIRTUELLE</div>
+            <div class="info-grid">
+              <div class="info-row"><span class="ik">SWAP TOTAL</span><span class="iv" id="swap-total">—</span></div>
+              <div class="info-row"><span class="ik">SWAP UTILISÉ</span><span class="iv" id="swap-used">—</span></div>
+            </div>
+            <div class="big-bar-wrap">
+              <div class="big-bar"><div id="swap-bar" class="big-bar-fill fill-purple"></div></div>
+              <span id="swap-pct" class="big-bar-val">0%</span>
+            </div>
+          </div>
+
+          <!-- ─ STOCKAGE ─ -->
+          <div id="tab-storage" class="tab-pane">
+            <div class="sec-title">PARTITIONS DÉTECTÉES</div>
+            <div id="disk-list"></div>
+            <div class="sec-title">I/O DISQUE (CUMULATIF)</div>
+            <div class="info-grid">
+              <div class="info-row"><span class="ik">LECTURE TOTALE</span><span class="iv" id="io-read">—</span></div>
+              <div class="info-row"><span class="ik">ÉCRITURE TOTALE</span><span class="iv" id="io-write">—</span></div>
+            </div>
+          </div>
+
+          <!-- ─ RÉSEAU ─ -->
+          <div id="tab-network" class="tab-pane">
+            <div class="sec-title">TRAFIC GLOBAL</div>
+            <div class="info-grid">
+              <div class="info-row"><span class="ik">DONNÉES ENVOYÉES</span><span class="iv" id="net-sent">—</span></div>
+              <div class="info-row"><span class="ik">DONNÉES REÇUES</span><span class="iv" id="net-recv">—</span></div>
+            </div>
+            <div class="sec-title">INTERFACES RÉSEAU</div>
+            <div id="net-ifaces"></div>
+          </div>
+
+          <!-- ─ PROCESSUS ─ -->
+          <div id="tab-procs" class="tab-pane">
+            <div class="sec-title">TOP PROCESSUS (PAR CPU)</div>
+            <table id="proc-table">
+              <thead><tr><th>PID</th><th>NOM</th><th>CPU %</th><th>RAM %</th><th>ÉTAT</th></tr></thead>
+              <tbody id="proc-tbody"></tbody>
+            </table>
+          </div>
+
+        </div><!-- /tab-body -->
       </div>
+    </section>
 
-      <div id="conv-log"></div>
-
-      <div id="input-row">
-        <input id="text-input" type="text"
-               placeholder="Entrez une commande…"
-               autocomplete="off" spellcheck="false">
-        <button id="send-btn">↵</button>
+    <!-- ── COL DROITE : Conversation ── -->
+    <section id="col-right">
+      <div class="panel h-full flex-col">
+        <div class="panel-corners"></div>
+        <div id="conv-hdr">
+          <span class="conv-title">JOURNAL DE SESSION</span>
+          <button id="clear-btn">⌫ EFFACER</button>
+        </div>
+        <div id="conv-log"></div>
+        <div id="input-row">
+          <input id="text-input" type="text" placeholder="Entrez une commande…" autocomplete="off" spellcheck="false">
+          <button id="send-btn">↵</button>
+        </div>
       </div>
     </section>
 

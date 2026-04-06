@@ -51,8 +51,8 @@ def tts():
 
 @socketio.on('connect')
 def on_connect():
-    info = system.get_system_info()
-    emit('system_update', info)
+    emit('system_update', system.get_system_info())
+    emit('detailed_update', system.get_detailed_info())
     emit('jarvis_ready', {'mode': ai._mode, 'provider': ai._provider})
 
 
@@ -75,6 +75,10 @@ def on_message(data):
 @socketio.on('get_system_status')
 def on_system_status():
     emit('system_update', system.get_system_info())
+
+@socketio.on('get_detailed_status')
+def on_detailed_status():
+    emit('detailed_update', system.get_detailed_info())
 
 
 @socketio.on('clear_history')
