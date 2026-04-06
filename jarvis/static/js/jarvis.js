@@ -188,19 +188,13 @@ function speak(text) {
 }
 
 // ── Reconnaissance vocale (Web Speech API) ────────────────────────────────
-let silenceTimer = null;
-const SILENCE_TIMEOUT_MS = 2000; // coupe après 2s de silence
+let silenceTimer  = null;
+let safetyTimer   = null;
 
 function stopListening() {
   clearTimeout(silenceTimer);
+  clearTimeout(safetyTimer);
   if (recognizer) { try { recognizer.stop(); } catch(_) {} }
-}
-
-function resetSilenceTimer() {
-  clearTimeout(silenceTimer);
-  silenceTimer = setTimeout(() => {
-    if (state === 'listening') stopListening();
-  }, SILENCE_TIMEOUT_MS);
 }
 
 function setupRecognizer() {
@@ -212,29 +206,31 @@ function setupRecognizer() {
   const r = new SR();
   r.lang            = 'fr-FR';
   r.continuous      = false;
-  r.interimResults  = true;
+  r.interimResults  = false;
   r.maxAlternatives = 1;
 
   r.onresult = e => {
-    resetSilenceTimer();
-    const last = e.results[e.results.length - 1];
-    if (last.isFinal) {
-      clearTimeout(silenceTimer);
-      sendMessage(last[0].transcript);
-    }
+    clearTimeout(silenceTimer);
+    clearTimeout(safetyTimer);
+    const text = e.results[0][0].transcript;
+    sendMessage(text);
   };
-  r.onspeechstart = () => resetSilenceTimer();
+
+  // Commence à compter le silence UNIQUEMENT quand la parole s'arrête
+  r.onspeechstart = () => clearTimeout(silenceTimer);
   r.onspeechend   = () => {
-    // Lance le timer de silence quand la parole s'arrête
-    resetSilenceTimer();
+    silenceTimer = setTimeout(() => stopListening(), 1200);
   };
+
   r.onerror = e => {
     clearTimeout(silenceTimer);
+    clearTimeout(safetyTimer);
     setState('idle');
     if (e.error !== 'no-speech') showToast(`Erreur micro : ${e.error}`);
   };
   r.onend = () => {
     clearTimeout(silenceTimer);
+    clearTimeout(safetyTimer);
     if (state === 'listening') setState('idle');
   };
   return r;
@@ -246,14 +242,14 @@ function startListening() {
   if (!recognizer) return;
   setState('listening');
   recognizer.start();
-  resetSilenceTimer();
+  // Sécurité : arrête après 15s max si rien n'est dit
+  safetyTimer = setTimeout(() => stopListening(), 15000);
 }
 
 micBtn.addEventListener('click', startListening);
 
 // ── Détection de clap (AudioContext) ─────────────────────────────────────
 let clapCooldown = 0;
-let clapReady    = false;
 
 async function initClapDetection() {
   try {
@@ -265,43 +261,39 @@ async function initClapDetection() {
     const src = audioCtx.createMediaStreamSource(stream);
     src.connect(analyser);
 
-    // Reprendre le contexte audio si suspendu par le navigateur
-    const resumeCtx = () => {
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    };
-    document.addEventListener('click',    resumeCtx, { once: false });
-    document.addEventListener('keydown',  resumeCtx, { once: false });
-    document.addEventListener('touchend', resumeCtx, { once: false });
-
     const buf = new Uint8Array(analyser.frequencyBinCount);
     let prevRms = 0;
 
     function check() {
-      if (audioCtx.state === 'running') {
-        analyser.getByteTimeDomainData(buf);
-        let sum = 0;
-        for (let i = 0; i < buf.length; i++) sum += ((buf[i]/128)-1) ** 2;
-        const rms = Math.sqrt(sum / buf.length);
-
-        // Mettre à jour le visu
-        if (state === 'listening') drawWave(buf);
-
-        const now = Date.now();
-        // Seuil abaissé à 0.3 (était 0.45) et transition rapide < 0.15 (était 0.1)
-        if (rms > 0.3 && prevRms < 0.15 && now > clapCooldown) {
-          clapCooldown = now + 1500;
-          if (state === 'idle') {
-            showToast('Clap détecté ✓');
-            startListening();
-          }
-        }
-        prevRms = rms;
-      }
+      // IMPORTANT : toujours relancer la boucle, même si suspendu
       requestAnimationFrame(check);
+
+      // Tenter de reprendre si le navigateur a suspendu le contexte
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+        return;
+      }
+
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += ((buf[i] / 128) - 1) ** 2;
+      const rms = Math.sqrt(sum / buf.length);
+
+      if (state === 'listening') drawWave(buf);
+
+      const now = Date.now();
+      if (rms > 0.3 && prevRms < 0.15 && now > clapCooldown) {
+        clapCooldown = now + 1500;
+        if (state === 'idle') {
+          showToast('Clap détecté ✓');
+          startListening();
+        }
+      }
+      prevRms = rms;
     }
     check();
-    clapReady = true;
-  } catch {
+  } catch(e) {
+    console.warn('Clap detection:', e);
     showToast('Accès micro refusé — clic sur le bouton uniquement.');
   }
 }
