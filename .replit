@@ -30,13 +30,12 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd jarvis && python app.py"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "cd jarvis && python tui.py"
 
 [agent]
 stack = "PNPM_WORKSPACE"
