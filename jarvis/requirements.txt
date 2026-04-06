@@ -4,3 +4,4 @@ openai
 psutil
 requests
 Pillow
+pywebview
