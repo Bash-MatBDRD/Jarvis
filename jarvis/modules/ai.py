@@ -1,5 +1,5 @@
 """
-Moteur IA de JARVIS — OpenAI avec personnalité et accès système complet
+Moteur IA de JARVIS — Groq (gratuit) avec personnalité et accès système complet
 """
 
 import json
@@ -30,7 +30,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "open_app",
-            "description": "Ouvrir ou lancer une application installée sur le PC (Steam, OBS, Chrome, Spotify, Discord, VS Code, Explorer, Notepad, etc.)",
+            "description": "Ouvrir ou lancer une application installée sur le PC",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -160,53 +160,35 @@ TOOLS = [
 
 
 class JarvisAI:
-    """Cerveau de JARVIS — supporte Groq (gratuit) et OpenAI."""
+    """Cerveau de JARVIS — propulsé par Groq (gratuit)."""
 
     def __init__(self, config: dict):
-        self.config   = config
-        self.history  = []
-        self._client  = None
-        self._model   = None
-        self._mode    = 'basic'
+        self.config    = config
+        self.history   = []
+        self._client   = None
+        self._model    = None
+        self._mode     = 'basic'
         self._provider = 'none'
 
-        provider = config.get('ai_provider', 'openai').lower()
+        key = config.get('groq_api_key', '').strip()
+
+        if not key:
+            print("  [ Groq : aucune clé GROQ_API_KEY trouvée — mode basique ]")
+            print("  [ Mode commandes basiques actif ]")
+            return
 
         try:
             from openai import OpenAI
-
-            # ── Essai OpenAI ──────────────────────────────────────────────────
-            if provider == 'openai':
-                key = config.get('openai_api_key', '').strip()
-                if key:
-                    self._client   = OpenAI(api_key=key)
-                    self._model    = config.get('openai_model', 'gpt-4o-mini')
-                    self._mode     = 'ai'
-                    self._provider = 'openai'
-                    print(f"  [ Mode IA activé — OpenAI ({self._model}) ]")
-                else:
-                    print("  [ OpenAI : pas de clé — tentative avec Groq ]")
-                    provider = 'groq'   # fallback automatique
-
-            # ── Essai Groq (ou fallback) ──────────────────────────────────────
-            if provider == 'groq':
-                key = config.get('groq_api_key', '').strip()
-                if key:
-                    self._client   = OpenAI(
-                        api_key=key,
-                        base_url='https://api.groq.com/openai/v1',
-                    )
-                    self._model    = config.get('groq_model', 'llama-3.3-70b-versatile')
-                    self._mode     = 'ai'
-                    self._provider = 'groq'
-                    print(f"  [ Mode IA activé — Groq ({self._model}) ]")
-                else:
-                    print("  [ Groq : pas de clé non plus — mode basique ]")
-
+            self._client   = OpenAI(
+                api_key=key,
+                base_url='https://api.groq.com/openai/v1',
+            )
+            self._model    = config.get('groq_model', 'llama-3.3-70b-versatile')
+            self._mode     = 'ai'
+            self._provider = 'groq'
+            print(f"  [ Mode IA activé — Groq ({self._model}) ]")
         except ImportError:
             print("  [ openai non installé — mode basique ]")
-
-        if self._mode == 'basic':
             print("  [ Mode commandes basiques actif ]")
 
     # ── Traitement d'un message ───────────────────────────────────────────────
@@ -216,11 +198,10 @@ class JarvisAI:
             return self._ai_response(text, system)
         return self._basic_response(text, system)
 
-    # ── Mode IA (OpenAI) ──────────────────────────────────────────────────────
+    # ── Mode IA (Groq) ────────────────────────────────────────────────────────
 
     def _ai_response(self, text: str, system: SystemController) -> str:
         self.history.append({"role": "user", "content": text})
-
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + self.history[-20:]
 
         try:
@@ -233,11 +214,10 @@ class JarvisAI:
                 max_tokens=400,
             )
         except Exception as e:
-            return f"Erreur de connexion à l'IA : {e}"
+            return f"Erreur de connexion à Groq : {e}"
 
         msg = response.choices[0].message
 
-        # ── Appels d'outils ────────────────────────────────────────────────────
         if msg.tool_calls:
             tool_results = []
             for tc in msg.tool_calls:
@@ -250,7 +230,6 @@ class JarvisAI:
                     "content":      result,
                 })
 
-            # Relancer avec les résultats des outils
             self.history.append(msg)
             messages2 = [{"role": "system", "content": SYSTEM_PROMPT}] + \
                         self.history[-20:] + tool_results
@@ -268,7 +247,6 @@ class JarvisAI:
             self.history.append({"role": "assistant", "content": final_text})
             return final_text
 
-        # ── Réponse texte simple ──────────────────────────────────────────────
         text_response = msg.content or "Je n'ai pas de réponse pour le moment."
         self.history.append({"role": "assistant", "content": text_response})
         return text_response
@@ -284,8 +262,7 @@ class JarvisAI:
             elif name == 'search_web':
                 return system.search_web(args['query'])
             elif name == 'get_system_info':
-                info = system.get_system_info()
-                return info['summary']
+                return system.get_system_info()['summary']
             elif name == 'get_weather':
                 return system.get_weather(args['city'])
             elif name == 'take_screenshot':
@@ -312,14 +289,13 @@ class JarvisAI:
         except Exception as e:
             return f"Erreur lors de l'exécution de {name} : {e}"
 
-    # ── Mode basique (sans clé API) ───────────────────────────────────────────
+    # ── Mode basique (sans clé) ───────────────────────────────────────────────
 
     def _basic_response(self, text: str, system: SystemController) -> str:
         t = text.lower()
 
         if any(w in t for w in ['info système', 'cpu', 'ram', 'mémoire', 'système']):
-            info = system.get_system_info()
-            return info['summary']
+            return system.get_system_info()['summary']
 
         if any(w in t for w in ['météo', 'temps qu\'il fait', 'weather']):
             for city in ['Paris', 'Lyon', 'Marseille', 'Bordeaux', 'Lille']:
@@ -332,14 +308,6 @@ class JarvisAI:
 
         if any(w in t for w in ['steam', 'nouveauté', 'nouveau jeu', 'quoi de neuf']):
             return system.get_steam_news()
-
-        if any(w in t for w in ['stream', 'twitch', 'obs']):
-            return system.start_stream(
-                self.config['obs_path'],
-                {'host': self.config['obs_host'],
-                 'port': self.config['obs_port'],
-                 'password': self.config['obs_password']}
-            )
 
         if any(w in t for w in ['lance', 'ouvre', 'démarre', 'open', 'start']):
             for app in ['chrome', 'firefox', 'steam', 'discord', 'spotify',
@@ -362,8 +330,9 @@ class JarvisAI:
             return "À votre service."
 
         return (
-            "Je fonctionne en mode basique sans clé OpenAI. "
-            "Ajoutez votre clé dans config.py pour accéder à toute l'intelligence de JARVIS."
+            "Mode basique actif — ajoutez votre clé Groq via la variable "
+            "d'environnement GROQ_API_KEY pour activer l'IA complète. "
+            "Compte gratuit sur https://console.groq.com"
         )
 
     def clear_history(self):
