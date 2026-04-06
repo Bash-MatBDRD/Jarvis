@@ -4,7 +4,7 @@ CONFIG = {
     # ══════════════════════════════════════════════════════════════════════════
 
     # Fournisseur actif : 'groq' (gratuit) | 'openai' (payant) | 'none' (basique)
-    'ai_provider': 'groq',
+    'ai_provider': 'openai',
 
     # ── Groq — GRATUIT ────────────────────────────────────────────────────────
     # 1. Créez un compte sur https://console.groq.com

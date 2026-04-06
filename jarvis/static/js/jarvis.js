@@ -188,6 +188,21 @@ function speak(text) {
 }
 
 // ── Reconnaissance vocale (Web Speech API) ────────────────────────────────
+let silenceTimer = null;
+const SILENCE_TIMEOUT_MS = 2000; // coupe après 2s de silence
+
+function stopListening() {
+  clearTimeout(silenceTimer);
+  if (recognizer) { try { recognizer.stop(); } catch(_) {} }
+}
+
+function resetSilenceTimer() {
+  clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => {
+    if (state === 'listening') stopListening();
+  }, SILENCE_TIMEOUT_MS);
+}
+
 function setupRecognizer() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
@@ -195,19 +210,33 @@ function setupRecognizer() {
     return null;
   }
   const r = new SR();
-  r.lang           = 'fr-FR';
-  r.interimResults = false;
+  r.lang            = 'fr-FR';
+  r.continuous      = false;
+  r.interimResults  = true;
   r.maxAlternatives = 1;
 
   r.onresult = e => {
-    const text = e.results[0][0].transcript;
-    sendMessage(text);
+    resetSilenceTimer();
+    const last = e.results[e.results.length - 1];
+    if (last.isFinal) {
+      clearTimeout(silenceTimer);
+      sendMessage(last[0].transcript);
+    }
+  };
+  r.onspeechstart = () => resetSilenceTimer();
+  r.onspeechend   = () => {
+    // Lance le timer de silence quand la parole s'arrête
+    resetSilenceTimer();
   };
   r.onerror = e => {
+    clearTimeout(silenceTimer);
     setState('idle');
     if (e.error !== 'no-speech') showToast(`Erreur micro : ${e.error}`);
   };
-  r.onend = () => { if (state === 'listening') setState('idle'); };
+  r.onend = () => {
+    clearTimeout(silenceTimer);
+    if (state === 'listening') setState('idle');
+  };
   return r;
 }
 
@@ -217,12 +246,15 @@ function startListening() {
   if (!recognizer) return;
   setState('listening');
   recognizer.start();
+  resetSilenceTimer();
 }
 
 micBtn.addEventListener('click', startListening);
 
 // ── Détection de clap (AudioContext) ─────────────────────────────────────
 let clapCooldown = 0;
+let clapReady    = false;
+
 async function initClapDetection() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -233,30 +265,42 @@ async function initClapDetection() {
     const src = audioCtx.createMediaStreamSource(stream);
     src.connect(analyser);
 
+    // Reprendre le contexte audio si suspendu par le navigateur
+    const resumeCtx = () => {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    };
+    document.addEventListener('click',    resumeCtx, { once: false });
+    document.addEventListener('keydown',  resumeCtx, { once: false });
+    document.addEventListener('touchend', resumeCtx, { once: false });
+
     const buf = new Uint8Array(analyser.frequencyBinCount);
     let prevRms = 0;
 
     function check() {
-      analyser.getByteTimeDomainData(buf);
-      let sum = 0;
-      for (let i = 0; i < buf.length; i++) sum += ((buf[i]/128)-1) ** 2;
-      const rms = Math.sqrt(sum / buf.length);
+      if (audioCtx.state === 'running') {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += ((buf[i]/128)-1) ** 2;
+        const rms = Math.sqrt(sum / buf.length);
 
-      // Mettre à jour le visu
-      if (state === 'listening') drawWave(buf);
+        // Mettre à jour le visu
+        if (state === 'listening') drawWave(buf);
 
-      const now = Date.now();
-      if (rms > 0.45 && prevRms < 0.1 && now > clapCooldown) {
-        clapCooldown = now + 1500;
-        if (state === 'idle') {
-          showToast('Clap détecté ✓');
-          startListening();
+        const now = Date.now();
+        // Seuil abaissé à 0.3 (était 0.45) et transition rapide < 0.15 (était 0.1)
+        if (rms > 0.3 && prevRms < 0.15 && now > clapCooldown) {
+          clapCooldown = now + 1500;
+          if (state === 'idle') {
+            showToast('Clap détecté ✓');
+            startListening();
+          }
         }
+        prevRms = rms;
       }
-      prevRms = rms;
       requestAnimationFrame(check);
     }
     check();
+    clapReady = true;
   } catch {
     showToast('Accès micro refusé — clic sur le bouton uniquement.');
   }
