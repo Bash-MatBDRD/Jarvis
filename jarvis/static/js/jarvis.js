@@ -1,18 +1,19 @@
-/* ── JARVIS — Interface frontend ─────────────────────────────────────────── */
+/* ── JARVIS — Interface ───────────────────────────────────────────────── */
 
 const socket = io();
 
-// ── État ──────────────────────────────────────────────────────────────────
-let state      = 'idle';   // idle | listening | thinking | speaking
+let state      = 'idle';
 let recognizer = null;
 let audioCtx   = null;
 let analyser   = null;
 let micStream  = null;
-let waveAnim   = null;
-let voices     = [];
+let currentAudio = null;
+let safetyTimer  = null;
+let clapCooldown = 0;
 
-// ── Éléments DOM ─────────────────────────────────────────────────────────
+// ── DOM ───────────────────────────────────────────────────────────────────
 const micBtn    = document.getElementById('mic-btn');
+const micLabel  = document.getElementById('mic-label');
 const stateLabel= document.getElementById('state-label');
 const convLog   = document.getElementById('conv-log');
 const textInput = document.getElementById('text-input');
@@ -26,16 +27,14 @@ const modeBadge = document.getElementById('mode-badge');
 function updateClock() {
   const n = new Date();
   document.getElementById('s-time').textContent =
-    n.getHours().toString().padStart(2,'0') + ':' +
-    n.getMinutes().toString().padStart(2,'0');
+    String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
 }
 updateClock();
 setInterval(updateClock, 1000);
 
-// ── Fond animé (particules) ───────────────────────────────────────────────
+// ── Fond hexagonal ────────────────────────────────────────────────────────
 const bgCanvas = document.getElementById('bg-canvas');
 const bgCtx    = bgCanvas.getContext('2d');
-let particles  = [];
 
 function resizeBg() {
   bgCanvas.width  = window.innerWidth;
@@ -44,75 +43,74 @@ function resizeBg() {
 resizeBg();
 window.addEventListener('resize', resizeBg);
 
-function initParticles(n = 60) {
-  particles = Array.from({length: n}, () => ({
-    x: Math.random() * bgCanvas.width,
-    y: Math.random() * bgCanvas.height,
-    vx: (Math.random() - .5) * .3,
-    vy: (Math.random() - .5) * .3,
-    r: Math.random() * 1.5 + .5,
-  }));
-}
-initParticles();
-
-function drawBg() {
+function drawHexGrid() {
   bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-  // Connexions
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const dx = particles[i].x - particles[j].x;
-      const dy = particles[i].y - particles[j].y;
-      const d  = Math.sqrt(dx*dx + dy*dy);
-      if (d < 130) {
-        bgCtx.beginPath();
-        bgCtx.moveTo(particles[i].x, particles[i].y);
-        bgCtx.lineTo(particles[j].x, particles[j].y);
-        bgCtx.strokeStyle = `rgba(0,180,220,${.12 * (1 - d/130)})`;
-        bgCtx.lineWidth = .5;
-        bgCtx.stroke();
+  const size = 36, h = size * Math.sqrt(3);
+  const cols = Math.ceil(bgCanvas.width  / (size * 1.5)) + 2;
+  const rows = Math.ceil(bgCanvas.height / h) + 2;
+  bgCtx.strokeStyle = 'rgba(79,195,247,0.045)';
+  bgCtx.lineWidth   = .7;
+
+  for (let col = -1; col < cols; col++) {
+    for (let row = -1; row < rows; row++) {
+      const x = col * size * 1.5;
+      const y = row * h + (col % 2 === 0 ? 0 : h / 2);
+      bgCtx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 180 * (60 * i - 30);
+        const px = x + size * Math.cos(a);
+        const py = y + size * Math.sin(a);
+        i === 0 ? bgCtx.moveTo(px, py) : bgCtx.lineTo(px, py);
       }
+      bgCtx.closePath();
+      bgCtx.stroke();
     }
   }
-  // Points
-  particles.forEach(p => {
-    p.x += p.vx; p.y += p.vy;
-    if (p.x < 0) p.x = bgCanvas.width;
-    if (p.x > bgCanvas.width) p.x = 0;
-    if (p.y < 0) p.y = bgCanvas.height;
-    if (p.y > bgCanvas.height) p.y = 0;
-    bgCtx.beginPath();
-    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    bgCtx.fillStyle = 'rgba(0,200,255,.5)';
-    bgCtx.fill();
-  });
-  requestAnimationFrame(drawBg);
 }
-drawBg();
+drawHexGrid();
+window.addEventListener('resize', drawHexGrid);
+
+// ── SVG tick marks ────────────────────────────────────────────────────────
+(function buildTicks() {
+  const g = document.getElementById('ticks');
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2 - Math.PI / 2;
+    const r1 = 148, r2 = i % 3 === 0 ? 138 : 143;
+    const x1 = 160 + r1 * Math.cos(a), y1 = 160 + r1 * Math.sin(a);
+    const x2 = 160 + r2 * Math.cos(a), y2 = 160 + r2 * Math.sin(a);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', 'rgba(79,195,247,.45)');
+    line.setAttribute('stroke-width', i % 3 === 0 ? '1.5' : '0.8');
+    g.appendChild(line);
+  }
+})();
 
 // ── Visualiseur de forme d'onde ───────────────────────────────────────────
 function drawWave(dataArray) {
-  wCtx.clearRect(0, 0, 160, 40);
+  wCtx.clearRect(0, 0, 110, 28);
   wCtx.beginPath();
-  const step = 160 / dataArray.length;
+  const step = 110 / dataArray.length;
   for (let i = 0; i < dataArray.length; i++) {
     const v = (dataArray[i] / 128) - 1;
-    const y = 20 + v * 16;
+    const y = 14 + v * 11;
     i === 0 ? wCtx.moveTo(0, y) : wCtx.lineTo(i * step, y);
   }
-  wCtx.strokeStyle = state === 'listening' ? '#00ff88' :
-                     state === 'speaking'  ? '#00d4ff' : 'rgba(0,212,255,.4)';
-  wCtx.lineWidth  = 1.5;
+  wCtx.strokeStyle = state === 'listening' ? '#00e676' :
+                     state === 'speaking'  ? '#4fc3f7' : 'rgba(79,195,247,.35)';
+  wCtx.lineWidth = 1.5;
   wCtx.stroke();
 }
 
 function idleWave() {
-  const t = Date.now() / 600;
-  const d = Array.from({length: 32}, (_,i) => 128 + Math.sin(t + i*.4) * 8);
+  const t = Date.now() / 700;
+  const d = Array.from({length: 32}, (_, i) => 128 + Math.sin(t + i * .4) * 6);
   drawWave(d);
 }
 setInterval(() => { if (state !== 'listening') idleWave(); }, 50);
 
-// ── Changer d'état ────────────────────────────────────────────────────────
+// ── État ─────────────────────────────────────────────────────────────────
 const STATE_LABELS = {
   idle:      'EN ATTENTE',
   listening: 'ÉCOUTE',
@@ -123,6 +121,7 @@ function setState(s) {
   state = s;
   document.body.className = s !== 'idle' ? s : '';
   stateLabel.textContent = STATE_LABELS[s] || s.toUpperCase();
+  micLabel.textContent   = s === 'listening' ? 'STOPPER' : 'PARLER';
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -135,61 +134,76 @@ function showToast(msg, dur = 3000) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), dur);
 }
 
-// ── Afficher un message dans le journal ───────────────────────────────────
+// ── Messages ──────────────────────────────────────────────────────────────
 function addMessage(role, text) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-  div.innerHTML = `<span class="msg-role">${role === 'user' ? 'VOUS' : 'JARVIS'}</span>
-                   <div class="msg-bubble"></div>`;
+  div.innerHTML = `<span class="msg-role">${role === 'user' ? 'VOUS' : 'J.A.R.V.I.S'}</span><div class="msg-bubble"></div>`;
   const bubble = div.querySelector('.msg-bubble');
 
   if (role === 'jarvis') {
-    // Effet machine à écrire
     bubble.classList.add('typing-cursor');
     let i = 0;
-    const interval = setInterval(() => {
+    const iv = setInterval(() => {
       bubble.textContent += text[i++];
-      if (i >= text.length) {
-        clearInterval(interval);
-        bubble.classList.remove('typing-cursor');
-      }
-    }, 18);
+      if (i >= text.length) { clearInterval(iv); bubble.classList.remove('typing-cursor'); }
+    }, 16);
   } else {
     bubble.textContent = text;
   }
-
   convLog.appendChild(div);
   convLog.scrollTop = convLog.scrollHeight;
 }
 
-// ── Synthèse vocale (voix JARVIS) ─────────────────────────────────────────
-window.speechSynthesis.onvoiceschanged = () => {
-  voices = window.speechSynthesis.getVoices();
-};
+// ── Voix JARVIS (OpenAI TTS — voix "onyx") ───────────────────────────────
+function stopAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+}
 
-function speak(text) {
-  window.speechSynthesis.cancel();
-  const utt  = new SpeechSynthesisUtterance(text);
-  utt.lang   = 'fr-FR';
-  utt.rate   = 1.0;
-  utt.pitch  = 0.85;
-  utt.volume = 1;
+async function speak(text) {
+  if (!text) return;
+  stopAudio();
+  setState('speaking');
 
-  // Cherche une voix française
-  const frVoice = voices.find(v => v.lang.startsWith('fr') && v.name.toLowerCase().includes('thomas')) ||
-                  voices.find(v => v.lang.startsWith('fr'));
+  try {
+    const res = await fetch('/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      // Fallback : synthèse navigateur si pas de clé OpenAI
+      fallbackSpeak(text);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; setState('idle'); };
+    audio.onerror = () => { setState('idle'); };
+    audio.play();
+  } catch {
+    fallbackSpeak(text);
+  }
+}
+
+function fallbackSpeak(text) {
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang  = 'fr-FR'; utt.rate = 1.0; utt.pitch = 0.8;
+  const frVoice = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('fr'));
   if (frVoice) utt.voice = frVoice;
-
-  utt.onstart = () => setState('speaking');
-  utt.onend   = ()  => setState('idle');
-  utt.onerror = ()  => setState('idle');
-
+  utt.onend = utt.onerror = () => setState('idle');
   window.speechSynthesis.speak(utt);
 }
 
-// ── Reconnaissance vocale (Web Speech API) ────────────────────────────────
-let safetyTimer = null;
-
+// ── Reconnaissance vocale ─────────────────────────────────────────────────
 function stopListening() {
   clearTimeout(safetyTimer);
   if (recognizer) { try { recognizer.stop(); } catch(_) {} }
@@ -197,51 +211,39 @@ function stopListening() {
 
 function setupRecognizer() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    showToast('Reconnaissance vocale non supportée. Utilisez Chrome ou Edge.');
-    return null;
-  }
+  if (!SR) { showToast('Reconnaisance vocale non supportée. Utilisez Chrome ou Edge.'); return null; }
   const r = new SR();
-  r.lang            = 'fr-FR';
-  r.continuous      = false;  // s'arrête seul après une pause naturelle
-  r.interimResults  = false;
-  r.maxAlternatives = 1;
+  r.lang = 'fr-FR'; r.continuous = false; r.interimResults = false; r.maxAlternatives = 1;
 
   r.onresult = e => {
     clearTimeout(safetyTimer);
-    const text = e.results[0][0].transcript;
-    sendMessage(text);
+    sendMessage(e.results[0][0].transcript);
   };
-
   r.onerror = e => {
     clearTimeout(safetyTimer);
     setState('idle');
     if (e.error !== 'no-speech') showToast(`Erreur micro : ${e.error}`);
   };
-
   r.onend = () => {
     clearTimeout(safetyTimer);
     if (state === 'listening') setState('idle');
   };
-
   return r;
 }
 
 function startListening() {
-  if (state !== 'idle') { window.speechSynthesis.cancel(); setState('idle'); return; }
+  if (state === 'speaking') { stopAudio(); setState('idle'); return; }
+  if (state !== 'idle') { stopListening(); setState('idle'); return; }
   recognizer = setupRecognizer();
   if (!recognizer) return;
   setState('listening');
   recognizer.start();
-  // Sécurité uniquement : coupe si aucune parole détectée après 10s
-  safetyTimer = setTimeout(() => stopListening(), 10000);
+  safetyTimer = setTimeout(() => stopListening(), 12000);
 }
 
 micBtn.addEventListener('click', startListening);
 
-// ── Détection de clap (AudioContext) ─────────────────────────────────────
-let clapCooldown = 0;
-
+// ── Détection de clap ─────────────────────────────────────────────────────
 async function initClapDetection() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -249,17 +251,14 @@ async function initClapDetection() {
     audioCtx  = new AudioContext();
     analyser  = audioCtx.createAnalyser();
     analyser.fftSize = 512;
-    const src = audioCtx.createMediaStreamSource(stream);
-    src.connect(analyser);
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
 
     const buf = new Uint8Array(analyser.frequencyBinCount);
     let prevRms = 0;
 
     function check() {
-      // IMPORTANT : toujours relancer la boucle, même si suspendu
-      requestAnimationFrame(check);
+      requestAnimationFrame(check); // toujours relancer, même si suspendu
 
-      // Tenter de reprendre si le navigateur a suspendu le contexte
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
         return;
@@ -273,7 +272,7 @@ async function initClapDetection() {
       if (state === 'listening') drawWave(buf);
 
       const now = Date.now();
-      if (rms > 0.3 && prevRms < 0.15 && now > clapCooldown) {
+      if (rms > 0.28 && prevRms < 0.12 && now > clapCooldown) {
         clapCooldown = now + 1500;
         if (state === 'idle') {
           showToast('Clap détecté ✓');
@@ -290,7 +289,7 @@ async function initClapDetection() {
 }
 initClapDetection();
 
-// ── Envoi d'un message ────────────────────────────────────────────────────
+// ── Envoi de message ──────────────────────────────────────────────────────
 function sendMessage(text) {
   text = text.trim();
   if (!text) return;
@@ -299,10 +298,7 @@ function sendMessage(text) {
   socket.emit('user_message', { text });
 }
 
-sendBtn.addEventListener('click', () => {
-  sendMessage(textInput.value);
-  textInput.value = '';
-});
+sendBtn.addEventListener('click', () => { sendMessage(textInput.value); textInput.value = ''; });
 textInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') { sendMessage(textInput.value); textInput.value = ''; }
 });
@@ -314,12 +310,12 @@ clearBtn.addEventListener('click', () => {
 // ── Socket.IO ─────────────────────────────────────────────────────────────
 socket.on('jarvis_ready', data => {
   if (data.mode === 'ai') {
-    const label = data.provider === 'groq' ? 'GROQ IA — GRATUIT' : 'OPENAI IA';
-    modeBadge.textContent       = label;
-    modeBadge.style.color       = '#00d4ff';
-    modeBadge.style.borderColor = 'rgba(0,212,255,.5)';
+    const label = data.provider === 'openai' ? 'OPENAI · ONYX' : 'GROQ IA';
+    modeBadge.textContent = label;
+    modeBadge.style.color = '#4fc3f7';
+    modeBadge.style.borderColor = 'rgba(79,195,247,.5)';
   }
-  addMessage('jarvis', 'Systèmes en ligne. Je suis prêt à vous assister. Clap ou clic pour parler.');
+  addMessage('jarvis', 'Systèmes en ligne. Prêt à vous assister. Clap ou clic pour parler.');
   speak('Systèmes en ligne. Je suis prêt à vous assister.');
 });
 
@@ -333,14 +329,13 @@ socket.on('status_change', data => {
 });
 
 socket.on('system_update', data => {
-  document.getElementById('s-cpu').textContent  = data.cpu  || '-';
-  document.getElementById('s-ram').textContent  = (data.ram || '-').split('/')[0].trim();
-  document.getElementById('s-disk').textContent = data.disk ? data.disk.split('%')[0].split('(')[1] + '%' : '-';
-  document.getElementById('s-bat').textContent  = data.battery || '-';
+  document.getElementById('s-cpu').textContent  = data.cpu   || '--';
+  document.getElementById('s-ram').textContent  = (data.ram  || '--').split('/')[0].trim();
+  document.getElementById('s-disk').textContent = data.disk  ? data.disk.split('%')[0].split('(')[1] + '%' : '--';
+  document.getElementById('s-bat').textContent  = data.battery || '--';
 });
 
-// Rafraîchir les stats système toutes les 10s
 setInterval(() => socket.emit('get_system_status'), 10000);
 
 socket.on('disconnect', () => showToast('Connexion perdue…'));
-socket.on('connect',    () => showToast('JARVIS connecté'));
+socket.on('connect',    () => showToast('JARVIS en ligne'));

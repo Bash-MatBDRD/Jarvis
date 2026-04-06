@@ -3,7 +3,7 @@ JARVIS — Serveur Flask principal
 """
 
 import threading
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, Response
 from flask_socketio import SocketIO, emit
 
 from config import CONFIG
@@ -28,6 +28,23 @@ def index():
 @app.route('/status')
 def status():
     return jsonify(system.get_system_info())
+
+@app.route('/tts', methods=['POST'])
+def tts():
+    data = request.get_json(silent=True) or {}
+    text = (data.get('text') or '').strip()[:600]
+    if not text:
+        return '', 400
+    key = CONFIG.get('openai_api_key', '').strip()
+    if not key:
+        return '', 503
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=key)
+        resp = client.audio.speech.create(model='tts-1', voice='onyx', input=text)
+        return Response(resp.read(), mimetype='audio/mpeg')
+    except Exception as e:
+        return str(e), 500
 
 
 # ── WebSocket ────────────────────────────────────────────────────────────────
