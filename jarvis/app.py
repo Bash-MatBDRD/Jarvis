@@ -2,6 +2,7 @@
 JARVIS — Serveur Flask principal
 """
 
+import os
 import threading
 from flask import Flask, render_template, jsonify, request, Response
 from flask_socketio import SocketIO, emit
@@ -91,8 +92,6 @@ def on_clear():
 
 if __name__ == '__main__':
     host = CONFIG['host']
-    port = CONFIG['port']
+    port = int(os.environ.get('PORT', CONFIG['port']))
     print(f"\n  JARVIS — http://{host}:{port}\n")
-    import webbrowser
-    threading.Timer(1.2, lambda: webbrowser.open(f'http://{host}:{port}')).start()
     socketio.run(app, host=host, port=port, debug=False, use_reloader=False)
